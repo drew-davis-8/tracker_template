@@ -110,4 +110,587 @@
         <div>
           <label for="day">Day</label><br />
           <input type="date" id="day" />
-        </d
+        </div>
+        <div style="flex:1; min-width:220px">
+          <label for="search">Search (title or tag)</label><br />
+          <input class="text" id="search" placeholder="e.g., review PRs, #deep-work" />
+        </div>
+        <div>
+          <label>&nbsp;</label><br />
+          <label><input type="checkbox" id="hideDone" /> Hide completed</label>
+        </div>
+        <div class="spacer"></div>
+        <div style="display:flex; gap:8px; align-items:end; flex-wrap:wrap">
+          <button class="btn ghost" id="exportBtn" title="Download JSON export">Export</button>
+          <label class="btn ghost" for="importFile" title="Import JSON file" style="display:inline-flex; align-items:center; gap:6px; cursor:pointer">
+            Import <input id="importFile" class="file" type="file" accept="application/json" hidden />
+          </label>
+          <!-- OneDrive action buttons (optional; requires clientId below) -->
+          <button class="btn" id="odSaveBtn" title="Save export to OneDrive">Save to OneDrive</button>
+          <button class="btn" id="odOpenBtn" title="Open export from OneDrive">Open from OneDrive</button>
+        </div>
+      </div>
+
+      <form class="add" id="addForm" autocomplete="off">
+        <input id="title" class="text" placeholder="Task title (required)" required />
+        <input id="tags" class="text" placeholder="tags (comma-separated)" />
+        <input id="minutes" class="num" type="number" inputmode="numeric" min="0" step="5" placeholder="minutes" />
+        <input id="notes" class="text notes-col" placeholder="notes (optional)" />
+        <button class="btn primary" type="submit">Add</button>
+      </form>
+
+      <div class="stats" id="stats"></div>
+    </div>
+
+    <div class="grid" style="margin-top:16px">
+      <!-- Left: task list -->
+      <div class="panel">
+        <ul id="list"></ul>
+        <div id="empty" class="muted" style="padding:12px; display:none">No tasks for this day yet.</div>
+      </div>
+
+      <!-- Right: visuals -->
+      <div class="panel">
+        <div class="viz">
+          <div>
+            <div class="small muted" style="margin-bottom:6px">Last 7 days (minutes)</div>
+            <canvas id="weekChart" class="canvas" width="500" height="220"></canvas>
+          </div>
+          <div>
+            <div class="small muted" style="margin-bottom:6px">Today by tag</div>
+            <div id="donut" class="donut"></div>
+            <div id="donutLegend" class="legend"></div>
+          </div>
+        </div>
+        <div style="margin-top:12px">
+          <div class="small muted" style="margin-bottom:6px">Last 90 days heatmap</div>
+          <div id="heatmap" class="heatmap"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footnotes -->
+    <div class="panel" style="margin-top:16px">
+      <div class="small muted">
+        Pro tip: click a <strong>tag chip</strong> to filter. Use <strong>Export</strong> to back up; <strong>Save to OneDrive / Open from OneDrive</strong> requires a Microsoft app client ID (see code comments).
+      </div>
+    </div>
+  </div>
+
+  <!-- Optional OneDrive Picker SDK. Leave it if you plan to use OneDrive. -->
+  <script src="https://js.live.net/v7.2/OneDrive.js"></script>
+
+  <script>
+    /** ============================================================
+     *  STORAGE / MODEL
+     * ============================================================ */
+    const KEY = 'daily_tasks_v1';
+    const ONEDRIVE_CLIENT_ID = 'YOUR_AZURE_APP_CLIENT_ID'; // <-- set this for OneDrive
+    // OneDrive note:
+    // 1) Create an app at https://portal.azure.com (App registrations)
+    // 2) Add a Redirect URI: type "Web", value "https://onedrive.live.com/picker" (for Picker) and your domain if hosting the file
+    // 3) Copy Application (client) ID here
+    // 4) Ensure "Files.ReadWrite" delegated permission is allowed. For simple Picker save/open, the SDK handles scopes.
+
+    let entries = load();
+
+    function load(){ try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } }
+    function save(data){ localStorage.setItem(KEY, JSON.stringify(data)); }
+    const todayYMD = () => { const d=new Date(); const mm=String(d.getMonth()+1).padStart(2,'0'); const dd=String(d.getDate()).padStart(2,'0'); return `${d.getFullYear()}-${mm}-${dd}`; };
+    const parseTags = s => (s||'').split(',').map(x=>x.trim()).filter(Boolean).slice(0,10);
+    const makeId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2,8)}`;
+
+    /** ============================================================
+     *  DOM HOOKS
+     * ============================================================ */
+    const dayEl = document.getElementById('day');
+    const searchEl = document.getElementById('search');
+    const hideDoneEl = document.getElementById('hideDone');
+    const listEl = document.getElementById('list');
+    const emptyEl = document.getElementById('empty');
+    const statsEl = document.getElementById('stats');
+    const addForm = document.getElementById('addForm');
+    const titleEl = document.getElementById('title');
+    const tagsEl = document.getElementById('tags');
+    const minutesEl = document.getElementById('minutes');
+    const notesEl = document.getElementById('notes');
+    const exportBtn = document.getElementById('exportBtn');
+    const importFile = document.getElementById('importFile');
+
+    // Visuals
+    const weekCanvas = document.getElementById('weekChart');
+    const donutEl = document.getElementById('donut');
+    const donutLegend = document.getElementById('donutLegend');
+    const heatmapEl = document.getElementById('heatmap');
+
+    // Pomodoro
+    const currentTaskSel = document.getElementById('currentTask');
+    const startPomBtn = document.getElementById('startPom');
+    const stopPomBtn = document.getElementById('stopPom');
+    const pomLeftEl = document.getElementById('pomLeft');
+
+    // OneDrive
+    const odSaveBtn = document.getElementById('odSaveBtn');
+    const odOpenBtn = document.getElementById('odOpenBtn');
+
+    /** ============================================================
+     *  RENDER TASK LIST & STATS
+     * ============================================================ */
+    function render(){
+      const day = dayEl.value;
+      const term = (searchEl.value || '').trim().toLowerCase();
+      const hideDone = hideDoneEl.checked;
+      let dayItems = entries.filter(e => e.date === day);
+
+      if (term) {
+        dayItems = dayItems.filter(e =>
+          e.title.toLowerCase().includes(term) ||
+          (e.tags || []).some(t => t.toLowerCase().includes(term)) ||
+          (e.notes || '').toLowerCase().includes(term)
+        );
+      }
+      if (hideDone) dayItems = dayItems.filter(e => !e.completed);
+
+      // sort: incomplete first, then newest
+      dayItems.sort((a,b)=> (a.completed-b.completed) || ((b.createdAt||0)-(a.createdAt||0)));
+
+      // Stats
+      const allForDay = entries.filter(e => e.date === day);
+      const total = allForDay.length;
+      const done = allForDay.filter(e => e.completed).length;
+      const minutes = allForDay.reduce((s,e)=>s+(+e.minutes||0),0);
+      const streak = calcStreak(entries);
+      const bestDay = calcBestDay(entries);
+      const avg7 = avgLast7(entries);
+
+      statsEl.innerHTML = `
+        <span class="stat">Tasks: <strong>${total}</strong></span>
+        <span class="stat">Completed: <strong>${done}</strong></span>
+        <span class="stat">Minutes today: <strong>${minutes}</strong></span>
+        <span class="stat">Streak: <strong>${streak}d</strong></span>
+        <span class="stat">Best day: <strong>${bestDay.mins}m</strong> ${bestDay.date?`<span class="small muted">(${bestDay.date})</span>`:''}</span>
+        <span class="stat">7-day avg: <strong>${avg7}m</strong></span>
+      `;
+
+      // List
+      listEl.innerHTML = '';
+      emptyEl.style.display = dayItems.length ? 'none' : 'block';
+
+      for (const e of dayItems) {
+        const li = document.createElement('li');
+        li.className = 'task';
+        li.dataset.id = e.id;
+
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = !!e.completed;
+        cb.addEventListener('change', () => { e.completed = cb.checked; e.updatedAt = Date.now(); save(entries); renderAll(); });
+
+        const title = document.createElement('div');
+        title.className = 'title' + (e.completed ? ' strike' : '');
+        title.textContent = e.title;
+        title.contentEditable = 'true';
+        title.title = e.notes ? `Notes: ${e.notes}` : '';
+        title.addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); title.blur(); }});
+        title.addEventListener('blur', () => {
+          const v = (title.textContent || '').trim();
+          if (!v) { title.textContent = e.title; return; }
+          e.title = v; e.updatedAt = Date.now(); save(entries); renderAll();
+        });
+
+        const tagWrap = document.createElement('div');
+        tagWrap.className = 'tags';
+        (e.tags || []).forEach(t => {
+          const chip = document.createElement('span');
+          chip.className = 'tag';
+          chip.textContent = `#${t}`;
+          chip.title = `Filter by #${t}`;
+          chip.addEventListener('click', () => { searchEl.value = t; renderAll(); });
+          tagWrap.appendChild(chip);
+        });
+
+        const right = document.createElement('div');
+        right.className = 'right';
+
+        const minus5 = mkBtn('−5','Subtract 5 minutes', ()=>adjustMinutes(e.id,-5));
+        const plus5  = mkBtn('+5','Add 5 minutes', ()=>adjustMinutes(e.id,+5));
+        const plus25 = mkBtn('+25','Add 25 minutes (Pomodoro)', ()=>adjustMinutes(e.id,+25));
+        const mins = document.createElement('div');
+        mins.className = 'mins mono'; mins.textContent = `${e.minutes || 0}m`;
+
+        const editBtn = mkBtn('Edit','Edit tags & notes', ()=>editEntry(e.id));
+        const delBtn  = mkBtn('Delete','Delete', ()=>delEntry(e.id), 'danger');
+
+        right.append(minus5, plus5, plus25, mins, editBtn, delBtn);
+        li.append(cb, title, tagWrap, right);
+        listEl.appendChild(li);
+      }
+
+      // Update currentTask selector (for Pomodoro)
+      const choices = entries.filter(e => e.date === day);
+      currentTaskSel.innerHTML = `<option value="">(choose a task for Pomodoro)</option>` +
+        choices.map(e => `<option value="${e.id}">${e.completed?'✓ ':''}${escapeHtml(e.title)} (${e.minutes||0}m)</option>`).join('');
+    }
+
+    function mkBtn(text, title, onClick, extraClass=''){
+      const b = document.createElement('button');
+      b.className = 'btn ' + extraClass; b.type='button'; b.textContent=text; b.title=title;
+      b.addEventListener('click', onClick); return b;
+    }
+
+    function adjustMinutes(id, delta){
+      const e = entries.find(x => x.id === id);
+      if (!e) return;
+      e.minutes = Math.max(0, (+e.minutes||0) + delta);
+      e.updatedAt = Date.now();
+      save(entries); renderAll();
+    }
+
+    function editEntry(id){
+      const e = entries.find(x => x.id === id);
+      if (!e) return;
+      const newTags = window.prompt('Edit tags (comma-separated):', (e.tags || []).join(', '));
+      if (newTags !== null) e.tags = parseTags(newTags);
+      const newNotes = window.prompt('Edit notes:', e.notes || '');
+      if (newNotes !== null) e.notes = newNotes.trim();
+      e.updatedAt = Date.now();
+      save(entries); renderAll();
+    }
+
+    function delEntry(id){
+      const e = entries.find(x => x.id === id);
+      if (!e) return;
+      if (!confirm(`Delete “${e.title}”? This cannot be undone.`)) return;
+      entries = entries.filter(x => x.id !== id);
+      save(entries); renderAll();
+    }
+
+    /** ============================================================
+     *  VISUALS
+     * ============================================================ */
+    function renderVisuals(){
+      renderWeekChart();
+      renderDonut();
+      renderHeatmap();
+    }
+
+    // BAR CHART (last 7 days)
+    function renderWeekChart(){
+      const ctx = weekCanvas.getContext('2d');
+      ctx.clearRect(0,0,weekCanvas.width,weekCanvas.height);
+      const days = lastNDates(7).reverse(); // oldest -> newest
+      const totals = days.map(d => sumMinutesForDate(d));
+      const max = Math.max(30, ...totals);
+      const padL=36, padR=6, padB=28, padT=10;
+      const w = weekCanvas.width - padL - padR;
+      const h = weekCanvas.height - padT - padB;
+      const bw = w / totals.length * 0.7;
+      const gap = w / totals.length * 0.3;
+
+      // axes
+      ctx.strokeStyle = '#2a3252';
+      ctx.beginPath();
+      ctx.moveTo(padL, padT); ctx.lineTo(padL, padT+h); ctx.lineTo(padL+w, padT+h); ctx.stroke();
+
+      // y labels
+      ctx.fillStyle = '#8b90a5';
+      ctx.font = '12px system-ui';
+      const steps = 3;
+      for(let i=0;i<=steps;i++){
+        const y = padT + h - (h*(i/steps));
+        const v = Math.round(max*(i/steps));
+        ctx.fillText(String(v), 6, y+4);
+        ctx.strokeStyle = '#1b2140';
+        ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL+w, y); ctx.stroke();
+      }
+
+      // bars
+      for(let i=0;i<totals.length;i++){
+        const x = padL + i*(bw+gap) + gap/2;
+        const barH = Math.round(h * (totals[i]/max));
+        ctx.fillStyle = '#6aa9ff';
+        ctx.fillRect(x, padT + (h-barH), bw, barH);
+
+        // x labels
+        ctx.fillStyle = '#8b90a5';
+        const label = days[i].slice(5); // MM-DD
+        ctx.fillText(label, x, padT+h+16);
+      }
+    }
+
+    // DONUT (today by tag)
+    function renderDonut(){
+      const day = dayEl.value;
+      const forDay = entries.filter(e=>e.date===day);
+      const byTag = new Map();
+      for(const e of forDay){
+        const mins = +e.minutes||0;
+        if (!e.tags || !e.tags.length) {
+          byTag.set('(untagged)', (byTag.get('(untagged)')||0) + mins);
+        } else {
+          for(const t of e.tags) byTag.set(t, (byTag.get(t)||0) + mins);
+        }
+      }
+      const pairs = [...byTag.entries()].sort((a,b)=>b[1]-a[1]);
+      const total = pairs.reduce((s,[,m])=>s+m,0) || 1;
+
+      // generate colors deterministically
+      const colorFor = (i)=> {
+        const hues = [210, 160, 120, 270, 320, 30, 0, 60, 90, 190];
+        const h = hues[i % hues.length];
+        return `hsl(${h} 90% 60%)`;
+      };
+
+      // conic gradient
+      let cur = 0;
+      let stops = [];
+      donutLegend.innerHTML = '';
+      pairs.forEach(([tag, m], i)=>{
+        const start = 360 * (cur/total);
+        cur += m;
+        const end = 360 * (cur/total);
+        const col = colorFor(i);
+        stops.push(`${col} ${start}deg ${end}deg`);
+
+        const chip = document.createElement('div');
+        chip.className = 'chip small';
+        const sw = document.createElement('span'); sw.className='swatch'; sw.style.background=col;
+        chip.append(sw, document.createTextNode(` ${tag} ${m}m`));
+        chip.addEventListener('click', ()=>{ searchEl.value = tag==='(untagged)'? '' : tag; renderAll(); });
+        donutLegend.appendChild(chip);
+      });
+      if (!stops.length){ stops = ['#1b2140 0deg 360deg']; donutLegend.innerHTML = '<span class="small muted">No time logged today.</span>'; }
+      donutEl.style.setProperty('--fill', `conic-gradient(${stops.join(',')})`);
+    }
+
+    // HEATMAP (last 90 days)
+    function renderHeatmap(){
+      const days = lastNDates(90).reverse();
+      heatmapEl.innerHTML = '';
+      const max = Math.max(1, ...days.map(d=>sumMinutesForDate(d)));
+      for(const d of days){
+        const m = sumMinutesForDate(d);
+        const lvl = m===0?0 : m < max*0.2 ? 1 : m < max*0.4 ? 2 : m < max*0.6 ? 3 : m < max*0.8 ? 4 : 5;
+        const cell = document.createElement('div');
+        cell.className = `cell l${lvl}`; cell.dataset.d = d.slice(5);
+        cell.title = `${d}: ${m} minutes`;
+        cell.addEventListener('click', ()=>{ dayEl.value = d; renderAll(); window.scrollTo({top:0,behavior:'smooth'}); });
+        heatmapEl.appendChild(cell);
+      }
+    }
+
+    function sumMinutesForDate(ymd){
+      return entries.filter(e=>e.date===ymd).reduce((s,e)=>s+(+e.minutes||0),0);
+    }
+    function lastNDates(n){
+      const out=[]; const d=new Date(); d.setHours(0,0,0,0);
+      for(let i=0;i<n;i++){ const dd=new Date(d); dd.setDate(d.getDate()-i);
+        const mm=String(dd.getMonth()+1).padStart(2,'0'); const day=String(dd.getDate()).padStart(2,'0');
+        out.push(`${dd.getFullYear()}-${mm}-${day}`);
+      }
+      return out;
+    }
+
+    function calcStreak(all){
+      // consecutive days (ending today) with any minutes logged
+      const days = new Set(all.filter(e=>(+e.minutes||0)>0).map(e=>e.date));
+      let streak=0; const seq = lastNDates(400); // generous
+      for(const d of seq){
+        if (days.has(d)) streak++;
+        else break;
+      }
+      return streak;
+    }
+    function calcBestDay(all){
+      const map = new Map();
+      for(const e of all){ map.set(e.date, (map.get(e.date)||0) + (+e.minutes||0)); }
+      let bestDate='', best=0;
+      for(const [d,m] of map){ if (m>best){ best=m; bestDate=d; } }
+      return {date:bestDate, mins:best};
+    }
+    function avgLast7(all){
+      const days = lastNDates(7);
+      const vals = days.map(d => all.filter(e=>e.date===d).reduce((s,e)=>s+(+e.minutes||0),0));
+      return Math.round(vals.reduce((s,v)=>s+v,0)/7);
+    }
+
+    /** ============================================================
+     *  POMODORO TIMER (25:00)
+     * ============================================================ */
+    let pomId=null, endTs=0;
+    startPomBtn.addEventListener('click', ()=>{
+      const sel = currentTaskSel.value;
+      if (!sel){ alert('Choose a task to track with Pomodoro.'); return; }
+      // 25 minutes
+      endTs = Date.now() + 25*60*1000;
+      startPomBtn.disabled = true; stopPomBtn.disabled = false;
+      tickPom();
+      pomId = setInterval(tickPom, 200);
+    });
+    stopPomBtn.addEventListener('click', stopPom);
+    function tickPom(){
+      const left = Math.max(0, endTs - Date.now());
+      const mm = String(Math.floor(left/60000)).padStart(2,'0');
+      const ss = String(Math.floor((left%60000)/1000)).padStart(2,'0');
+      pomLeftEl.textContent = `${mm}:${ss}`;
+      if (left<=0){ stopPom(true); }
+    }
+    function stopPom(completed=false){
+      clearInterval(pomId); pomId=null;
+      startPomBtn.disabled = false; stopPomBtn.disabled = true;
+      pomLeftEl.textContent = 'idle';
+      if (completed){
+        // credit 25 minutes to selected task
+        const id = currentTaskSel.value;
+        if (id){ adjustMinutes(id, +25); }
+        try{ new Notification('Pomodoro complete!', { body: '+25 minutes logged.' }); } catch {}
+      }
+    }
+    // Ask for notification permission
+    if ('Notification' in window && Notification.permission === 'default'){
+      Notification.requestPermission().catch(()=>{});
+    }
+
+    /** ============================================================
+     *  EXPORT / IMPORT (local)
+     * ============================================================ */
+    exportBtn.addEventListener('click', () => {
+      const payload = { version:2, exportedAt:new Date().toISOString(), entries };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `daily-task-log-${todayYMD()}.json`;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    });
+
+    importFile.addEventListener('change', async () => {
+      const file = importFile.files && importFile.files[0];
+      if (!file) return;
+      try{
+        const text = await file.text();
+        let data = JSON.parse(text);
+        if (Array.isArray(data)) data = {entries:data}; // backward-compat
+        const incoming = Array.isArray(data.entries) ? data.entries : [];
+        const existingIds = new Set(entries.map(e => e.id));
+        let added=0;
+        for (const e of incoming) {
+          if (!e || !e.id || existingIds.has(e.id)) continue;
+          entries.push(e); added++;
+        }
+        save(entries); renderAll();
+        alert(`Imported ${added} new item(s).`);
+      } catch(err){
+        alert('Import failed: invalid file.');
+      } finally {
+        importFile.value = '';
+      }
+    });
+
+    /** ============================================================
+     *  OneDrive: Save/Open via Picker (optional)
+     * ============================================================ */
+    odSaveBtn.addEventListener('click', ()=>{
+      if (!window.OneDrive || !ONEDRIVE_CLIENT_ID || ONEDRIVE_CLIENT_ID.includes('YOUR_')){
+        alert('To use OneDrive: set ONEDRIVE_CLIENT_ID in the source (see comments).');
+        return;
+      }
+      const payload = { version:2, exportedAt:new Date().toISOString(), entries };
+      const content = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
+
+      // Create an object URL to provide a stream to the Picker
+      const url = URL.createObjectURL(content);
+
+      const odOptions = {
+        clientId: ONEDRIVE_CLIENT_ID,
+        action: 'save',
+        fileName: `daily-task-log-${todayYMD()}.json`,
+        sourceInputElementId: null,
+        file: { '@microsoft.graph.conflictBehavior': 'replace' },
+        openInNewWindow: true,
+        // Provide the content via "file" or "stream". We'll use stream via `fileUri`.
+        fileUri: url,
+        success: () => { URL.revokeObjectURL(url); alert('Saved to OneDrive.'); },
+        cancel: () => { URL.revokeObjectURL(url); },
+        error: (e) => { URL.revokeObjectURL(url); alert('OneDrive error: '+(e&&e.message||'unknown')); }
+      };
+      OneDrive.save(odOptions);
+    });
+
+    odOpenBtn.addEventListener('click', ()=>{
+      if (!window.OneDrive || !ONEDRIVE_CLIENT_ID || ONEDRIVE_CLIENT_ID.includes('YOUR_')){
+        alert('To use OneDrive: set ONEDRIVE_CLIENT_ID in the source (see comments).');
+        return;
+      }
+      const odOptions = {
+        clientId: ONEDRIVE_CLIENT_ID,
+        action: 'download',
+        multiSelect: false,
+        advanced: { filter: '.json' },
+        openInNewWindow: true,
+        success: async (files)=>{
+          try{
+            const f = files.value && files.value[0];
+            if (!f || !f['@microsoft.graph.downloadUrl']) { alert('No file selected.'); return; }
+            const url = f['@microsoft.graph.downloadUrl'];
+            // Fetch file (CORS allowed by OneDrive temp URLs)
+            const res = await fetch(url);
+            const text = await res.text();
+            let data = JSON.parse(text);
+            if (Array.isArray(data)) data = {entries:data};
+            const incoming = Array.isArray(data.entries) ? data.entries : [];
+            const existingIds = new Set(entries.map(e => e.id));
+            let added=0;
+            for (const e of incoming) {
+              if (!e || !e.id || existingIds.has(e.id)) continue;
+              entries.push(e); added++;
+            }
+            save(entries); renderAll();
+            alert(`Imported ${added} item(s) from OneDrive.`);
+          } catch(err){ alert('Failed to import from OneDrive.'); }
+        },
+        cancel: ()=>{},
+        error: (e)=>{ alert('OneDrive error: '+(e&&e.message||'unknown')); }
+      };
+      OneDrive.open(odOptions);
+    });
+
+    /** ============================================================
+     *  EVENTS & INIT
+     * ============================================================ */
+    addForm.addEventListener('submit', ev => {
+      ev.preventDefault();
+      const title = (titleEl.value || '').trim();
+      if (!title) { titleEl.focus(); return; }
+      const entry = {
+        id: makeId(),
+        date: dayEl.value,
+        title,
+        tags: parseTags(tagsEl.value),
+        minutes: Math.max(0, Number(minutesEl.value || 0)),
+        notes: (notesEl.value || '').trim(),
+        completed: false,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      entries.push(entry);
+      save(entries);
+      addForm.reset();
+      titleEl.focus();
+      renderAll();
+    });
+
+    dayEl.addEventListener('change', renderAll);
+    searchEl.addEventListener('input', renderAll);
+    hideDoneEl.addEventListener('change', renderAll);
+
+    function renderAll(){ render(); renderVisuals(); }
+
+    function escapeHtml(s){ return (s||'').replace(/[&<>"]/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c])); }
+
+    // Set default date & first render
+    dayEl.value = todayYMD();
+    renderAll();
+  </script>
+</body>
+</html>
