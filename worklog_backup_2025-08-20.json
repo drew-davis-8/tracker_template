@@ -1,0 +1,204 @@
+{
+  "activities": [
+    {
+      "id": "act_3ybdub1_mek9z60j",
+      "date": "2025-08-11",
+      "title": "Update AWS MGA Documentation",
+      "durationMinutes": 90,
+      "tags": [
+        "access",
+        "mga"
+      ],
+      "status": "done",
+      "followUp": false
+    },
+    {
+      "id": "act_tzd4pc2_mek9mz2z",
+      "date": "2025-08-12",
+      "title": "Update PG Revenue SharePoint",
+      "durationMinutes": 120,
+      "tags": [
+        "analytics"
+      ],
+      "status": "done",
+      "followUp": true,
+      "followUpId": "fu_k0p9npv_mek9mz2z"
+    },
+    {
+      "id": "act_0q2moa7_mek9jh1o",
+      "date": "2025-08-07",
+      "title": "AWS <> Power BI Project",
+      "durationMinutes": 240,
+      "tags": [
+        "security",
+        "analytics",
+        "access"
+      ],
+      "status": "done",
+      "followUp": true,
+      "followUpId": "fu_nl7a7we_mek9jh1o"
+    },
+    {
+      "id": "act_7mp6x49_mek9hm3e",
+      "date": "2025-08-04",
+      "title": "AWS <> Power BI Project",
+      "durationMinutes": 240,
+      "tags": [
+        "security",
+        "analytics"
+      ],
+      "status": "done",
+      "followUp": false
+    },
+    {
+      "id": "act_u4ozz6z_mek9fwa3",
+      "date": "2025-08-06",
+      "title": "Invoicing",
+      "durationMinutes": 90,
+      "tags": [
+        "analytics"
+      ],
+      "status": "done",
+      "followUp": false
+    },
+    {
+      "id": "act_9e9kd2g_mek9eudu",
+      "date": "2025-08-05",
+      "title": "Invoicing",
+      "durationMinutes": 90,
+      "tags": [
+        "analytics"
+      ],
+      "status": "done",
+      "followUp": false
+    },
+    {
+      "id": "act_xq06n47_mek9diau",
+      "date": "2025-08-05",
+      "title": "ROPA Document input",
+      "durationMinutes": 90,
+      "tags": [
+        "soc2"
+      ],
+      "status": "done",
+      "followUp": false
+    },
+    {
+      "id": "act_zfsfje8_mek9bm70",
+      "date": "2025-08-09",
+      "title": "Add shared inbox (GSRLosscontrol) for Paul",
+      "durationMinutes": 15,
+      "tags": [
+        "access"
+      ],
+      "status": "done",
+      "followUp": false
+    },
+    {
+      "id": "act_erfjk9p_mek9avce",
+      "date": "2025-08-09",
+      "title": "Vulnerabilities Ticket Submission (critical)",
+      "durationMinutes": 90,
+      "tags": [
+        "security",
+        "soc2",
+        "pg"
+      ],
+      "status": "done",
+      "followUp": false
+    },
+    {
+      "id": "act_4tz8vel_mek98kvm",
+      "date": "2025-08-14",
+      "title": "Access for Britain to add 365 environment for scanning",
+      "durationMinutes": 60,
+      "tags": [
+        "kobalt",
+        "soc2"
+      ],
+      "status": "done",
+      "followUp": false
+    },
+    {
+      "id": "act_uk8nwe9_mek97r74",
+      "date": "2025-08-20",
+      "title": "MGA Sharepoint Created",
+      "durationMinutes": 45,
+      "tags": [
+        "access",
+        "mga"
+      ],
+      "status": "done",
+      "followUp": false
+    },
+    {
+      "id": "act_t6ubov4_mek94cjd",
+      "date": "2025-08-19",
+      "title": "Finish ROPA documentation",
+      "durationMinutes": 90,
+      "tags": [
+        "soc2"
+      ],
+      "status": "done",
+      "followUp": false
+    }
+  ],
+  "followUps": [
+    {
+      "id": "fu_w3p95r5_meka2kad",
+      "createdAt": "2025-08-20",
+      "dueDate": "2025-08-31",
+      "title": "Add a description component to activities",
+      "tags": [
+        "gpt"
+      ],
+      "status": "open"
+    },
+    {
+      "id": "fu_ta6yy2d_meka1l4j",
+      "createdAt": "2025-08-20",
+      "dueDate": "2025-08-31",
+      "title": "Look into calendar feature for Daily Tracker",
+      "notes": "I would like to add a calendar display feature that allows a view of hours, but would also include PTO used",
+      "tags": [
+        "gpt"
+      ],
+      "status": "open"
+    },
+    {
+      "id": "fu_k0p9npv_mek9mz2z",
+      "createdAt": "2025-08-20",
+      "dueDate": "2025-08-21",
+      "title": "Update Dataset with API pings",
+      "notes": "Need to add updated invoicing data.",
+      "tags": [
+        "analytics"
+      ],
+      "status": "open"
+    },
+    {
+      "id": "fu_nl7a7we_mek9jh1o",
+      "createdAt": "2025-08-20",
+      "dueDate": "2025-08-22",
+      "title": "Connect back with Bourntech",
+      "notes": "Documentation had multiple missing steps. It's back into Bourntech's hands. ",
+      "tags": [
+        "security",
+        "analytics",
+        "access"
+      ],
+      "status": "open"
+    },
+    {
+      "id": "fu_7ehdi5c_mek96smq",
+      "createdAt": "2025-08-20",
+      "dueDate": "2025-08-22",
+      "title": "Sample Set for PG Testing",
+      "notes": "Need to create a sample set that has address, lat/long, and description. We need about 20 properties. Look into previous tickets ",
+      "tags": [
+        "pg"
+      ],
+      "status": "open"
+    }
+  ]
+}
