@@ -85,7 +85,7 @@
 <body>
   <div class="wrap">
     <div class="row" style="justify-content:space-between;align-items:center">
-      <h1>Daily Worklog & Follow-ups (Standalone)</h1>
+      <h1>Daily Worklog & Follow-ups</h1>
       <div class="toolbar">
         <span id="cloudStatus" class="muted">Cloud: Not connected</span>
         <button id="connectCloud">Connect OneDrive File</button>
@@ -109,7 +109,11 @@
       </div>
       <div style="flex:1 1 200px">
         <label for="tags">Tags (comma separated)</label>
-        <input id="tags" placeholder="access,security, etl">
+        <input id="tags" placeholder="sepsis, etl">
+      </div>
+      </div>div style="flex:1 1 100%">
+        <label for="qfuNotes">Follow-up notes (optional)</label>
+        <textarea id="qfuNotes" rows="3" placeholder="Additional context"></textarea>
       </div>
       
       <div style="flex:1 1 220px">
@@ -136,7 +140,7 @@
       </div>
       <div style="flex:1 1 200px">
         <label for="qfuTags">Tags (optional)</label>
-        <input id="qfuTags" placeholder="access, security, etl">
+        <input id="qfuTags" placeholder="sepsis, etl">
       </div>
       <div style="flex:1 1 160px">
         <label for="qfuStatus">Status</label>
