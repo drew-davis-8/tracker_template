@@ -218,11 +218,11 @@
         
       <div class="card" style="flex:1 1 50%">
         <div class="muted">Hours by Day</div>
-        \1260\2></canvas>
+        <canvas id="byDay" height="260"></canvas>
       </div>
       <div class="card" style="flex:1 1 50%">
         <div class="muted">Hours by Tag</div>
-        \1260\2></canvas>
+        <canvas id="byTag" height="260"></canvas>
         <div id="legendByTag" class="row" style="margin-top:8px; flex-wrap:wrap; gap:6px"></div>
       </div>
     </div>
@@ -625,7 +625,6 @@ const makeFU = (f) => {
 function drawByTag(acts){
   const c=$("byTag"), ctx=c.getContext("2d"), w=c.width=c.clientWidth*2, h=c.height=c.height*2/2;
   clearCanvas(c);
-  // tooltip element
   let tip = document.getElementById("byTagTooltip");
   if(!tip){
     tip = document.createElement("div");
@@ -646,7 +645,6 @@ function drawByTag(acts){
     ctx.beginPath(); ctx.moveTo(cx,cy); ctx.fillStyle = `hsl(${hue},70%,70%)`;
     ctx.arc(cx,cy, r, start, end); ctx.closePath(); ctx.fill();
     slices.push({label: lab||"(untagged)", value: values[i], start, end, hue});
-    // Legend
     if (legend) {
       const row = document.createElement("div");
       row.style.display = "flex"; row.style.alignItems = "center"; row.style.gap = "6px";
