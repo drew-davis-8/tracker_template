@@ -81,15 +81,12 @@
   .print-overlay{ position:static; inset:auto; padding:0; z-index:auto }
 }
 
-
-.wl-tooltip{position:fixed;display:none;pointer-events:none;padding:6px 8px;border-radius:8px;background:#0f172a;color:#fff;font-size:12px;box-shadow:0 6px 20px rgba(0,0,0,.15);z-index:9999;white-space:nowrap}
 </style>
-
 </head>
 <body>
   <div class="wrap">
     <div class="row" style="justify-content:space-between;align-items:center">
-      <h1>Daily Worklog & Follow-ups</h1>
+      <h1>Daily Worklog & Follow-ups (Standalone)</h1>
       <div class="toolbar">
         <span id="cloudStatus" class="muted">Cloud: Not connected</span>
         <button id="connectCloud">Connect OneDrive File</button>
@@ -113,14 +110,11 @@
       </div>
       <div style="flex:1 1 200px">
         <label for="tags">Tags (comma separated)</label>
-        <input id="tags" placeholder="access,security, etl">
+        <input id="tags" placeholder="sepsis, etl">
       </div>
       
       <div style="flex:1 1 220px">
-        <label for="details">Description</label>
-<textarea id="details" rows="2" placeholder="Add a short description..."></textarea>
-
-<label><input id="createFU" type="checkbox"> Create follow-up</label>
+        <label><input id="createFU" type="checkbox"> Create follow-up</label>
         <div id="fuBox" class="hidden" style="margin-top:6px;border:1px dashed var(--border);border-radius:10px;padding:8px"><input id="fuTitle" placeholder="Follow-up title (optional)" style="margin-bottom:6px"><label for="fuDue" style="margin-top:4px; display:block">Due date (optional)</label><input id="fuDue" type="date" style="margin-bottom:6px"><label for="fuNotes" style="margin-top:4px; display:block">Follow-up notes (optional)</label><textarea id="fuNotes" rows="3" placeholder="Additional context for this follow-up"></textarea></div>
       </div>
       <div style="flex:1 1 100%;display:flex;justify-content:flex-end;gap:8px">
@@ -143,7 +137,7 @@
       </div>
       <div style="flex:1 1 200px">
         <label for="qfuTags">Tags (optional)</label>
-        <input id="qfuTags" placeholder="access, security, etl">
+        <input id="qfuTags" placeholder="sepsis, etl">
       </div>
       <div style="flex:1 1 160px">
         <label for="qfuStatus">Status</label>
@@ -216,13 +210,13 @@
 </div>
 <div class="row" style="gap:12px">
         
-      <div class="card" style="flex:1 1 50%">
+      <div class="card" style="flex:1 1 48%">
         <div class="muted">Hours by Day</div>
-        <canvas id="byDay" height="260"></canvas>
+        <canvas id="byDay" height="220"></canvas>
       </div>
-      <div class="card" style="flex:1 1 50%">
+      <div class="card" style="flex:1 1 48%">
         <div class="muted">Hours by Tag</div>
-        <canvas id="byTag" height="260"></canvas>
+        <canvas id="byTag" height="220"></canvas>
         <div id="legendByTag" class="row" style="margin-top:8px; flex-wrap:wrap; gap:6px"></div>
       </div>
     </div>
@@ -621,69 +615,31 @@ const makeFU = (f) => {
   }
 
   
-  
-function drawByTag(acts){
-  const c=$("byTag"), ctx=c.getContext("2d"), w=c.width=c.clientWidth*2, h=c.height=c.height*2/2;
-  clearCanvas(c);
-  let tip = document.getElementById("byTagTooltip");
-  if(!tip){
-    tip = document.createElement("div");
-    tip.id = "byTagTooltip";
-    tip.className = "wl-tooltip";
-    document.body.appendChild(tip);
-  }
-  const legend = document.getElementById("legendByTag"); if (legend) legend.innerHTML="";
-  const map={}; acts.forEach(a=>(a.tags||[]).forEach(t=>{ map[t]=(map[t]||0)+(a.durationMinutes||0); }));
-  const entries=Object.entries(map).sort((a,b)=>b[1]-a[1]);
-  const labels=entries.map(e=>e[0]); const values=entries.map(e=>Math.round((e[1]/60)*100)/100);
-  const total = values.reduce((s,v)=>s+v,0) || 1;
-  const cx=w/2, cy=h/2, r=Math.min(w,h)/2 - 20;
-  let start=0; const slices=[];
-  labels.forEach((lab,i)=>{
-    const frac = values[i]/total; const end = start + frac*2*Math.PI;
-    const hue = (i*70)%360;
-    ctx.beginPath(); ctx.moveTo(cx,cy); ctx.fillStyle = `hsl(${hue},70%,70%)`;
-    ctx.arc(cx,cy, r, start, end); ctx.closePath(); ctx.fill();
-    slices.push({label: lab||"(untagged)", value: values[i], start, end, hue});
-    if (legend) {
-      const row = document.createElement("div");
-      row.style.display = "flex"; row.style.alignItems = "center"; row.style.gap = "6px";
-      const sw = document.createElement("span");
-      sw.style.display="inline-block"; sw.style.width="12px"; sw.style.height="12px"; sw.style.borderRadius="3px";
-      sw.style.background = `hsl(${hue},70%,70%)`;
-      const label = document.createElement("span");
-      label.textContent = `${lab || "(untagged)"}`;
-      row.appendChild(sw); row.appendChild(label);
-      legend.appendChild(row);
-    }
-    start=end;
-  });
-  if (labels.length===0 && legend){
-    const empty = document.createElement("div"); empty.className="muted"; empty.textContent="No tag data in this range."; legend.appendChild(empty);
-  }
-  if(!c._tooltipInit){
-    c.addEventListener("mousemove",(e)=>{
-      if(!slices.length){ tip.style.display="none"; return; }
-      const scale = c.width / c.clientWidth;
-      const rect = c.getBoundingClientRect();
-      const x = (e.clientX - rect.left) * scale;
-      const y = (e.clientY - rect.top) * scale;
-      const dx = x - cx, dy = y - cy;
-      const dist = Math.sqrt(dx*dx + dy*dy);
-      if (dist > r) { tip.style.display="none"; return; }
-      let ang = Math.atan2(dy, dx); if (ang < 0) ang += Math.PI*2;
-      const hit = slices.find(s => ang >= s.start && ang < s.end);
-      if (!hit) { tip.style.display="none"; return; }
-      tip.textContent = `${hit.label}: ${hit.value} h`;
-      tip.style.left = (e.clientX + 12) + "px";
-      tip.style.top = (e.clientY + 12) + "px";
-      tip.style.display = "block";
-    });
-    c.addEventListener("mouseleave", ()=>{ tip.style.display="none"; });
-    c._tooltipInit = true;
-  }
-}
-
+  function drawByTag(acts){
+    const c=$("byTag"), ctx=c.getContext("2d"), w=c.width=c.clientWidth*2, h=c.height=c.height*2/2;
+    clearCanvas(c);
+    const legend = document.getElementById("legendByTag"); if (legend) legend.innerHTML="";
+    const map={}; acts.forEach(a=>(a.tags||[]).forEach(t=>{ map[t]=(map[t]||0)+(a.durationMinutes||0); }));
+    const entries=Object.entries(map).sort((a,b)=>b[1]-a[1]); const labels=entries.map(e=>e[0]); const values=entries.map(e=>hours(e[1]));
+    const total = values.reduce((s,v)=>s+v,0) || 1;
+    const cx=w/2, cy=h/2, r=Math.min(w,h)/2 - 20;
+    let start=0;
+    labels.forEach((lab,i)=>{
+      const frac = values[i]/total; const end = start + frac*2*Math.PI;
+      ctx.beginPath(); ctx.moveTo(cx,cy); ctx.fillStyle = `hsl(${(i*70)%360},70%,70%)`;
+      ctx.arc(cx,cy, r, start, end); ctx.closePath(); ctx.fill();
+      // Legend item
+      if (legend) {
+        const row = document.createElement("div");
+        row.style.display = "flex"; row.style.alignItems = "center"; row.style.gap = "6px";
+        const sw = document.createElement("span");
+        sw.style.display="inline-block"; sw.style.width="12px"; sw.style.height="12px"; sw.style.borderRadius="3px";
+        sw.style.background = `hsl(${(i*70)%360},70%,70%)`;
+        const label = document.createElement("span");
+        label.textContent = `${lab || "(untagged)"}`;
+        row.appendChild(sw); row.appendChild(label);
+        legend.appendChild(row);
+      }
       start=end;
     });
     if (labels.length===0 && legend){
@@ -692,33 +648,25 @@ function drawByTag(acts){
   }
   
 
-  
-function drawCumul(acts){
-  const c=$("cumul");
-  if(!c){ return; }
-  const ctx=c.getContext("2d"), w=c.width=c.clientWidth*2, h=c.height=c.height*2/2;
-  clearCanvas(c);
-  const padding=50;
-  const sorted=[...acts].sort((a,b)=>a.date.localeCompare(b.date));
-  let cumAll=0; const labels=[], A=[], D=[];
-  sorted.forEach(a=>{ cumAll++; labels.push(a.date); A.push(cumAll); D.push(cumAll); });
-  const maxV=niceMax(Math.max(1, ...A, ...D, 1));
-  drawAxes(ctx,w,h,padding);
-  const plotW=w-2*padding, plotH=h-2*padding;
-  function drawLine(vals,color){
-    ctx.beginPath(); ctx.strokeStyle=color; ctx.lineWidth=3;
-    vals.forEach((v,i)=>{
-      const x = padding + (plotW/Math.max(1,labels.length-1))*(i);
-      const y = h - padding - (v/maxV)*plotH;
-      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
-    });
-    ctx.stroke();
-  }
-  drawLine(A,"#1d4ed8"); drawLine(D,"#10b981");
-  ctx.fillStyle="#334155"; ctx.textAlign="right";
-  for(let t=0;t<=4;t++){ const v=maxV*t/4; const y=h-padding-(v/maxV)*plotH; ctx.fillText(String(v), padding-8, y+6); }
-}
-
+  function drawCumul(acts){
+    const c=$("cumul"), ctx=c.getContext("2d"), w=c.width=c.clientWidth*2, h=c.height=c.height*2/2;
+    clearCanvas(c);
+    const padding=50;
+    const sorted=[...acts].sort((a,b)=>a.date.localeCompare(b.date));
+    let cumAll=0; const labels=[], A=[], D=[];
+    sorted.forEach(a=>{ cumAll++; labels.push(a.date); A.push(cumAll); D.push(cumAll); });
+    const maxV=niceMax(Math.max(1, ...A, ...D, 1));
+    drawAxes(ctx,w,h,padding);
+    const plotW=w-2*padding, plotH=h-2*padding;
+    function drawLine(vals,color){
+      ctx.beginPath(); ctx.strokeStyle=color; ctx.lineWidth=3;
+      vals.forEach((v,i)=>{
+        const x = padding + (plotW/Math.max(1,labels.length-1))*(i);
+        const y = h - padding - (v/maxV)*plotH;
+        if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+      });
+      ctx.stroke();
+    }
     drawLine(A,"#1d4ed8"); drawLine(D,"#10b981");
     ctx.fillStyle="#334155"; ctx.textAlign="right";
     for(let t=0;t<=4;t++){ const v=maxV*t/4; const y=h-padding-(v/maxV)*plotH; ctx.fillText(String(v), padding-8, y+6); }
@@ -936,10 +884,7 @@ function makeSummaryHTML({r, acts, fus}){
           .print-root .ps-kpis{grid-template-columns:repeat(4,1fr)}
           .print-root .ps-grid2{grid-template-columns:1fr 1fr}
         }
-      
-.wl-tooltip{position:fixed;display:none;pointer-events:none;padding:6px 8px;border-radius:8px;background:#0f172a;color:#fff;font-size:12px;box-shadow:0 6px 20px rgba(0,0,0,.15);z-index:9999;white-space:nowrap}
-</style>
-
+      </style>
 
       <header>
         <div>
