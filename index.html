@@ -1,4 +1,3 @@
-
 <!doctype html>
 <html lang="en">
 <head>
@@ -625,6 +624,7 @@ const makeFU = (f) => {
 
   
   
+
 function drawByTag(acts){
   const c=$("byTag"), ctx=c.getContext("2d"), w=c.width=c.clientWidth*2, h=c.height=c.height*2/2;
   clearCanvas(c);
@@ -706,33 +706,65 @@ function drawByTag(acts){
   c._slices = slices;
 }
 
-      start=end;
-    });
-    if (labels.length===0 && legend){
-      const empty = document.createElement("div"); empty.className="muted"; empty.textContent="No tag data in this range."; legend.appendChild(empty);
-    }
-  }
-  
+  // Build data
+  const legend = document.getElementById("legendByTag"); if (legend) legend.innerHTML="";
+  const map={}; acts.forEach(a=>(a.tags||[]).forEach(t=>{ map[t]=(map[t]||0)+(a.durationMinutes||0); }));
+  const entries=Object.entries(map).sort((a,b)=>b[1]-a[1]);
+  const labels=entries.map(e=>e[0]);
+  const values=entries.map(e=>Math.round((e[1]/60)*100)/100); // hours
+  const total = values.reduce((s,v)=>s+v,0) || 1;
 
-  function drawCumul(acts){
-    const c=$("cumul"), ctx=c.getContext("2d"), w=c.width=c.clientWidth*2, h=c.height=c.height*2/2;
-    clearCanvas(c);
-    const padding=50;
-    const sorted=[...acts].sort((a,b)=>a.date.localeCompare(b.date));
-    let cumAll=0; const labels=[], A=[], D=[];
-    sorted.forEach(a=>{ cumAll++; labels.push(a.date); A.push(cumAll); D.push(cumAll); });
-    const maxV=niceMax(Math.max(1, ...A, ...D, 1));
-    drawAxes(ctx,w,h,padding);
-    const plotW=w-2*padding, plotH=h-2*padding;
-    function drawLine(vals,color){
-      ctx.beginPath(); ctx.strokeStyle=color; ctx.lineWidth=3;
-      vals.forEach((v,i)=>{
-        const x = padding + (plotW/Math.max(1,labels.length-1))*(i);
-        const y = h - padding - (v/maxV)*plotH;
-        if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
-      });
-      ctx.stroke();
+  const cx=w/2, cy=h/2, r=Math.min(w,h)/2 - 20;
+
+  // Compute slices and draw
+  let start=0;
+  const slices=[];
+  labels.forEach((lab,i)=>{
+    const frac = values[i]/total; const end = start + frac*2*Math.PI;
+    const hue = (i*70)%360;
+    ctx.beginPath(); ctx.moveTo(cx,cy); ctx.fillStyle = `hsl(${hue},70%,70%)`;
+    ctx.arc(cx,cy, r, start, end); ctx.closePath(); ctx.fill();
+    slices.push({label: lab||"(untagged)", value: values[i], start, end, hue});
+    // Legend item
+    if (legend) {
+      const row = document.createElement("div");
+      row.style.display = "flex"; row.style.alignItems = "center"; row.style.gap = "6px";
+      const sw = document.createElement("span");
+      sw.style.display="inline-block"; sw.style.width="12px"; sw.style.height="12px"; sw.style.borderRadius="3px";
+      sw.style.background = `hsl(${hue},70%,70%)`;
+      const label = document.createElement("span");
+      label.textContent = `${lab || "(untagged)"}`;
+      row.appendChild(sw); row.appendChild(label);
+      legend.appendChild(row);
     }
+
+  
+function drawCumul(acts){
+  const c=$("cumul");
+  if(!c){ return; } // safely skip if not present
+  const ctx=c.getContext("2d"), w=c.width=c.clientWidth*2, h=c.height=c.height*2/2;
+  clearCanvas(c);
+  const padding=50;
+  const sorted=[...acts].sort((a,b)=>a.date.localeCompare(b.date));
+  let cumAll=0; const labels=[], A=[], D=[];
+  sorted.forEach(a=>{ cumAll++; labels.push(a.date); A.push(cumAll); D.push(cumAll); });
+  const maxV=niceMax(Math.max(1, ...A, ...D, 1));
+  drawAxes(ctx,w,h,padding);
+  const plotW=w-2*padding, plotH=h-2*padding;
+  function drawLine(vals,color){
+    ctx.beginPath(); ctx.strokeStyle=color; ctx.lineWidth=3;
+    vals.forEach((v,i)=>{
+      const x = padding + (plotW/Math.max(1,labels.length-1))*(i);
+      const y = h - padding - (v/maxV)*plotH;
+      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    });
+    ctx.stroke();
+  }
+  drawLine(A,"#1d4ed8"); drawLine(D,"#10b981");
+  ctx.fillStyle="#334155"; ctx.textAlign="right";
+  for(let t=0;t<=4;t++){ const v=maxV*t/4; const y=h-padding-(v/maxV)*plotH; ctx.fillText(String(v), padding-8, y+6); }
+}
+
     drawLine(A,"#1d4ed8"); drawLine(D,"#10b981");
     ctx.fillStyle="#334155"; ctx.textAlign="right";
     for(let t=0;t<=4;t++){ const v=maxV*t/4; const y=h-padding-(v/maxV)*plotH; ctx.fillText(String(v), padding-8, y+6); }
